@@ -8,39 +8,29 @@ let db= require('../Database/db');
 const db1 = require("../Model");
 const Role = db1.role;
 
-
-
+//Registering the user
 router.post("/register", (req, res, next) =>{
+    //Validates sent data through the body. If there are they are sent to frontend
     const { errors, isValid } = validateRegisterInput(req.body);
-    console.log(errors);
     if(!isValid){
         return res.json(errors);
     }
+
     userSchema.findOne({ Email: req.body.Email }).then(user => {
         if (user) {
             return res.json({ Email: "Email already exists" });
-        } else {
-            // const newUser = new userSchema({
-            //     FirstName: req.body.FirstName,
-            //     LastName: req.body.LastName,
-            //     Username: req.body.Username,
-            //     Email : req.body.Email,
-            //     PasswordOne : req.body.PasswordOne
-            // });
-            // bcrypt.genSalt(10, (err, salt) => {
-            //     bcrypt.hash(newUser.PasswordOne, salt, (err, hash) => {
-            //         if (err) throw err;
-            //         newUser.PasswordOne = hash;
-            //         newUser
-            //             .save()
-            //             .then()
-            //             .catch(err => console.log(err));
-            //     });
-            // });
+        }
+        else{
+            userSchema.findOne({ Username: req.body.Username }).then(u =>{
+                if(u){
+                    return res.json({ Username: "Username already exists"})
+                }
 
-            console.log(req.body.roles);
+
             if (req.body.roles) {
-                var query = {name : req.body.roles};
+                const query = {name: "user"};
+                //Checks if the role exists in the database and gets the id
+                //Sets the id of the role and saves the data
                 Role.findOne(query, (erro, roles) => {
                         if (erro) {
                             res.status(500).send({message: erro});
@@ -66,10 +56,11 @@ router.post("/register", (req, res, next) =>{
                             });
                         });
                        console.log("user registered");
+                       res.json({success: true})
                     }
                 );
             } else {
-                Role.findOne({name: "user"}, (err, role) => {
+                Role.findOne({name: "moderator"}, (err, role) => {
                     if (err) {
                         res.status(500).send({message: err});
                         return;
@@ -83,7 +74,7 @@ router.post("/register", (req, res, next) =>{
                         PasswordOne : req.body.PasswordOne,
                         roles : role._id
                     });
-                    console.log(newUser1);
+                    //Encrypts the password
                     bcrypt.genSalt(10, (err, salt) => {
                         bcrypt.hash(newUser1.PasswordOne, salt, (err, hash) => {
                             if (err) throw err;
@@ -96,18 +87,21 @@ router.post("/register", (req, res, next) =>{
                     });
                 });
             }
+            });
         }
+
 
     });
 });
 
+//Logging in the user
 router.post("/login", (req, res) => {
     res.header(
         "Access-Control-Allow-Headers",
         "x-access-token, Origin, Content-Type, Accept"
     );
     const { errors, isValid } = validateLoginInput(req.body);
-// Check validation
+    // Check validation
     if (!isValid) {
         return res.json(errors);
     }
@@ -134,12 +128,6 @@ router.post("/login", (req, res) => {
                     {
                         expiresIn: 86400 // 1 year in seconds
                     },
-                    // (err, token) => {
-                    //     res.json({
-                    //         success: true,
-                    //         token: "Bearer " + token
-                    //     });
-                    // }
                 );
 
                 var authorities = [];
@@ -149,7 +137,7 @@ router.post("/login", (req, res) => {
                     if(user.roles.length===1){
                         authorities.push("ROLE_" + roles.name.toUpperCase());
                     }
-
+                    //Sends the access token, roles and the success status.
                     res.json({
                         username: user.Username,
                         success: true,
@@ -167,7 +155,6 @@ router.post("/login", (req, res) => {
 });
 
 router.post("/getOne:Username", (req, res) => {
-console.log(req.params.Username);
     userSchema.findOne({ Username: req.params.Username }).then(user => {
         return res.json(user);
     });
@@ -175,78 +162,80 @@ console.log(req.params.Username);
 
 });
 
-router.route('/edit-details:Email').put((req, res, next) => {
-    var query = {Email: req.params.Email};
+//Editing the user
+router.route('/edit-details:Id').put((req, res, next) => {
     console.log(req.body);
-    bcrypt.genSalt(10, (err, salt) => {
-        bcrypt.hash(req.body.PasswordOne, salt, (err, hash) => {
-            if (err) throw err;
-            const newUser = new userSchema({
-                FirstName: req.body.FirstName,
-                LastName: req.body.LastName,
-                Username: req.body.Username,
-                Email: req.body.Email,
-                PasswordOne: hash
-            });
+    const Email = req.body.Email;
+    var newUser;
+    userSchema.findOne({ Email}).then(user => {
+        //Checks if the current password matches the sent password
+        bcrypt.compare(req.body.CurrentPassword, user.PasswordOne).then(isMatch => {
+            if (isMatch) {
+                if (req.body.PasswordOne !== '') {
+                    bcrypt.genSalt(10, (err, salt) => {
+                        bcrypt.hash(req.body.PasswordOne, salt, (err, hash) => {
+                            if (err) throw err;
+                             newUser = {
+                                FirstName: req.body.FirstName,
+                                LastName: req.body.LastName,
+                                Username: req.body.Username,
+                                PasswordOne: hash
+                            };
+                            userSchema.findOneAndUpdate({Email:Email}, {$set: newUser}, {new:true}).then((user)=>{
+                                console.log(user);
+                                res.json({
+                                    modifiedUser:user,
+                                    success:true,
+                                    passwordChanged:true
+                                });
+                            }).catch(err=>{
+                                console.error(err);
+                                res.sendStatus(500);
+                            });
+                        })
+                    })
 
-            console.log(newUser);
-
-            userSchema.remove(query, (error, data) => {
-                if (error) {
-                    return next(error);
                 } else {
-                    newUser
-                        .save()
-                        .then(res.json(data))
-                        .catch(err => console.log(err));
+                       newUser = {
+                        FirstName: req.body.FirstName,
+                        LastName: req.body.LastName,
+                        Username: req.body.Username,
+                    };
+                    userSchema.findOneAndUpdate({Email:Email}, {$set: newUser}, {new:true}).then((user)=>{
+                        res.json({
+                            modifiedUser:user,
+                            success:true,
+                            passwordChanged:false
+                        });
+                    }).catch(err=>{
+                        console.error(err);
+                        res.sendStatus(500);
+                    });
                 }
-            });
-            // userSchema.updateOne(query, {$set: newUser}, (error, data) => {
-            //     if (error) {
-            //         return next(error);
-            //     } else {
-            //         res.json(data);
-            //         res.status(200).json({
-            //             msg: data
-            //         })
-            //     }
-            // })
+
+
+            }
+           else {
+                console.log("not matched")
+                res.json({Error: 'Password does not match'})
+            }
         });
     });
 });
 
-// router.put("/edit-details", (req, res, next)=> {
-//     // userSchema.findOne({Email: req.body.Email}).then(user => {
-//     //     if (user) {
-//     //         const id = user.id;
-//             const newUser = new userSchema({
-//                 FirstName: req.body.FirstName,
-//                 LastName: req.body.LastName,
-//                 Username: req.body.Username,
-//                 PasswordOne: req.body.PasswordOne
-//             });
-//             bcrypt.genSalt(10, (err, salt) => {
-//                 bcrypt.hash(newUser.PasswordOne, salt, (err, hash) => {
-//                     if (err) throw err;
-//                     newUser.PasswordOne = hash;
-//                     userSchema.updateOne(
-//                         {Email:req.body.Email},
-//                         {$set:{
-//                                 FirstName: req.body.FirstName,
-//                                 LastName: req.body.LastName,
-//                                 Username: req.body.Username,
-//                                 PasswordOne: req.body.PasswordOne
-//                             }
-//                     }.then(res => {
-//                             res.json(res.data);
-//                         }));
-//                 });
-//                 });
-//                 //userSchema.findByIdAndUpdate(id,{$set: newUser})
-//
-//             // });
-//     //     }
-//     // })
-// });
-
+//Deleting the user details
+router.route('/delete-user:id').post((req,res)=> {
+    userSchema.findOne({Username:req.params.id}).then(user => {
+        bcrypt.compare(req.body.CurrentPassword, user.PasswordOne).then(isMatch => {
+            if (isMatch) {
+        userSchema.findOneAndDelete({Username: req.params.id}).then(() => {
+            res.json({
+                success: true
+            })
+        }).catch(err => {
+            console.log(err);
+            res.sendStatus(500);
+        });}});
+    });
+});
 module.exports = router;
