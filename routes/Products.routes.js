@@ -78,6 +78,7 @@ let ProductSchema = require('../Model/Products');
         PricePerUnit: req.body.PricePerUnit,
         SubCategory: req.body.SubCategory,
         Discount : req.body.Discount,
+        addBy : req.body.addBy,
         TotRate: 0
     });
 
@@ -163,7 +164,7 @@ router.route('/search/:id').get((req,res) => {
 });
 
 //update when purchase
-router.route('/sold').post(async (req,res) => {
+router.route('/sold').post( (req,res) => {
 
   for(let i=0;i<req.body.length;i++) {
       ProductSchema.findById(req.body[i].ProductId, (error, data) => {
@@ -183,7 +184,8 @@ router.route('/sold').post(async (req,res) => {
               },
               {new: true})
               .then(() => {
-                  console.log("updated" + req.body[i].ProductId + s)
+                  console.log("updated" + req.body[i].ProductId + s),
+                      res.sendStatus(200);
               }).catch(err => {
               console.log("eorrrro")
               console.error(err)
@@ -258,10 +260,11 @@ router.route('/addnewItemToProduct/:id').post(upload.array('image',5),(req,res) 
                 "xl" : req.body.xl
             }
         }
-    },{safe: true, upsert: true, new : true},
-    function(err, model) {
-        console.log(err);
-    });
+    },{safe: true, upsert: true, new : true},).then(() => {
+        res.sendStatus(200)
+    }).catch(err => {
+        console.log(err)
+    })
 });
 
 //delete One item from product
